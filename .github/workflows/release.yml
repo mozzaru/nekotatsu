@@ -2,18 +2,13 @@ name: Build, Update, and Convert
 
 on:
   workflow_dispatch:
-    inputs:
-      backup_filename:
-        description: 'Nama file backup yang akan dikonversi (misalnya: backup.tcbk)'
-        required: true
-        default: 'backup.tcbk'
 
 jobs:
   build-update-convert:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository ini
         uses: actions/checkout@v4
 
       - name: Set up Rust
@@ -25,18 +20,12 @@ jobs:
       - name: Build nekotatsu
         run: cargo build --release
 
-      - name: Upload test backup (jika tersedia di repo)
-        if: exists('backup/${{ github.event.inputs.backup_filename }}')
-        uses: actions/upload-artifact@v4
-        with:
-          name: backup
-          path: backup/${{ github.event.inputs.backup_filename }}
-
-      - name: Download backup artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: backup
-          path: ./backup
+      - name: Download backup file dari mozzaru/nekotatsu (via raw link)
+        run: |
+          mkdir -p backup
+          curl -L \
+            -o backup/app.tachibk \
+            https://github.com/mozzaru/nekotatsu/raw/refs/heads/master/app.mihon_2025-05-11_21-33.tachibk
 
       - name: Jalankan nekotatsu update
         run: |
@@ -46,14 +35,23 @@ jobs:
 
       - name: Konversi backup ke Kotatsu
         run: |
-          ./target/release/nekotatsu convert backup/${{ github.event.inputs.backup_filename }} \
-            -o converted-output.json
+          ./target/release/nekotatsu convert backup/app.tachibk \
+            -o converted-output.zip
 
-      - name: Clean build
-        run: cargo clean
-  
+      - name: Validasi file output
+        run: |
+          if [ -f converted-output.zip ]; then
+            echo "File output ditemukan."
+          else
+            echo "File output TIDAK ditemukan."
+            exit 1
+          fi
+
       - name: Upload hasil konversi
         uses: actions/upload-artifact@v4
         with:
           name: converted-output
-          path: converted-output.json
+          path: converted-output.zip
+
+      - name: Clean build
+        run: cargo clean
