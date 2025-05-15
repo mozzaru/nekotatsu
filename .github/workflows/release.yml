@@ -1,94 +1,59 @@
+name: Build, Update, and Convert
+
 on:
-  release:
-    types: [created]
+  workflow_dispatch:
+    inputs:
+      backup_filename:
+        description: 'Nama file backup yang akan dikonversi (misalnya: backup.tcbk)'
+        required: true
+        default: 'backup.tcbk'
 
 jobs:
-  release:
-    name: Release - ${{ matrix.platform.release_for }}
-    strategy:
-      matrix:
-        platform:
-          - release_for: Linux-GNU-x86_64
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            bin: nekotatsu
-            name: nekotatsu-${{github.ref_name}}-Linux-GNU-x86_64.tar.gz
-            command: build
-            args: "--locked --release"
+  build-update-convert:
+    runs-on: ubuntu-latest
 
-          - release_for: Windows-x86_64
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            bin: nekotatsu.exe
-            name: nekotatsu-${{github.ref_name}}-Windows-x86_64.zip
-            command: both
-            args: "--locked --release"
-
-          - release_for: macOS-aarch64
-            os: macOS-latest
-            target: aarch64-apple-darwin
-            bin: nekotatsu
-            name: nekotatsu-${{github.ref_name}}-Darwin-aarch64.tar.gz
-            command: both
-            args: "--locked --release"
-          
-          # - release_for: Linux-GNU-x86_64 (GUI)
-          #   os: ubuntu-latest
-          #   target: x86_64-unknown-linux-gnu
-          #   bin: nekotatsu-gui
-          #   name: nekotatsu-gui-${{github.ref_name}}-Linux-GNU-x86_64.tar.gz
-          #   command: build
-          #   working-directory: gui
-          #   args: "--locked --release --package gui"
-          
-          # - release_for: Windows-x86_64 (GUI)
-          #   os: windows-latest
-          #   target: x86_64-pc-windows-msvc
-          #   bin: nekotatsu.exe
-          #   name: nekotatsu-${{github.ref_name}}-Windows-x86_64.zip
-          #   command: both
-          #   args: "--locked --release --package gui"
-
-          # - release_for: macOS-aarch64 (GUI)
-          #   os: macOS-latest
-          #   target: aarch64-apple-darwin
-          #   bin: nekotatsu
-          #   name: nekotatsu-${{github.ref_name}}-Darwin-aarch64.tar.gz
-          #   command: both
-          #   args: "--locked --release --package gui"
-
-
-    runs-on: ${{ matrix.platform.os }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - name: Build binary
-        uses: houseabsolute/actions-rust-cross@v0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
         with:
-          command: ${{ matrix.platform.command }}
-          target: ${{ matrix.platform.target }}
-          args: ${{ matrix.platform.args }}
-          strip: true
-      - name: Package as archive
-        shell: bash
+          toolchain: stable
+          override: true
+
+      - name: Build nekotatsu
+        run: cargo build --release
+
+      - name: Upload test backup (jika tersedia di repo)
+        if: exists('backup/${{ github.event.inputs.backup_filename }}')
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup
+          path: backup/${{ github.event.inputs.backup_filename }}
+
+      - name: Download backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backup
+          path: ./backup
+
+      - name: Jalankan nekotatsu update
         run: |
-          cd target/${{ matrix.platform.target }}/release
-          if [[ "${{ matrix.platform.os }}" == "windows-latest" ]]; then
-            7z a ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
-          else
-            tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
-          fi
-          cd -
-      - name: Publish release artifacts
-        uses: actions/upload-artifact@v3
+          ./target/release/nekotatsu update \
+            --tachi-link https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json \
+            --kotatsu-link https://github.com/KotatsuApp/kotatsu-parsers/archive/refs/heads/master.zip
+
+      - name: Konversi backup ke Kotatsu
+        run: |
+          ./target/release/nekotatsu convert backup/${{ github.event.inputs.backup_filename }} \
+            -o converted-output.json
+
+      - name: Clean build
+        run: cargo clean
+  
+      - name: Upload hasil konversi
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform.bin }}-${{ matrix.platform.os_name }}
-          path: "nekotatsu-*"
-      - name: Generate SHA-256
-        run: shasum -a 256 ${{ matrix.platform.name }}
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v1
-        with:
-          draft: true
-          files: "nekotatsu-*"
+          name: converted-output
+          path: converted-output.json
