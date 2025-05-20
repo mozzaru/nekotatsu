@@ -4,3 +4,8 @@
 *.tachibk
 *.gz
 /*.json
+
+# Jangan abaikan folder backups
+!backups/
+# Jangan abaikan file .tachibk di dalam backups
+!backups/*.tachibk
