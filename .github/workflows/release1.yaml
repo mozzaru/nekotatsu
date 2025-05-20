@@ -1,4 +1,4 @@
-name: to kotatsu, Build, Update, and Convert
+name: to mihon, Build, Update, and Convert
 
 on:
   workflow_dispatch:
@@ -20,11 +20,12 @@ jobs:
       - name: Build nekotatsu
         run: cargo build --release
 
-      - name: Clone repo mozzaru/nekotatsu dan salin folder backups
+      - name: Download backup file dari mozzaru/nekotatsu (via raw link)
         run: |
-          git clone --depth 1 https://github.com/mozzaru/nekotatsu.git temp_repo
           mkdir -p backup
-          cp -r temp_repo/backups/* backup/
+          curl -L \
+            -o backup/app.tachibk \
+            https://github.com/mozzaru/nekotatsu/raw/refs/heads/master/app.mihon_2025-05-11_21-33.tachibk
 
       - name: Jalankan nekotatsu update
         run: |
@@ -34,9 +35,8 @@ jobs:
 
       - name: Konversi backup ke Kotatsu
         run: |
-          TACHIBK_FILE=$(find backup -name "*.tachibk" | head -n 1)
-          echo "File yang dikonversi: $TACHIBK_FILE"
-          ./target/release/nekotatsu convert "$TACHIBK_FILE" -o converted-output.zip
+          ./target/release/nekotatsu convert backup/app.tachibk \
+            -o converted-output.zip
 
       - name: Validasi file output
         run: |
